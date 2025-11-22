@@ -17,7 +17,8 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import com.ashaassist.backend.security.JwtAuthenticationFilter;
 
 /**
- * Configures the security settings for the application, including authentication and authorization.
+ * Configures the security settings for the application, including
+ * authentication and authorization.
  */
 @Configuration
 @EnableWebSecurity
@@ -26,9 +27,11 @@ public class SecurityConfig {
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
 
     /**
-     * Constructs a new {@code SecurityConfig} with the specified JWT authentication filter.
+     * Constructs a new {@code SecurityConfig} with the specified JWT authentication
+     * filter.
      *
-     * @param jwtAuthenticationFilter the filter to use for JWT-based authentication.
+     * @param jwtAuthenticationFilter the filter to use for JWT-based
+     *                                authentication.
      */
     public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
@@ -49,7 +52,8 @@ public class SecurityConfig {
      *
      * @param configuration the authentication configuration.
      * @return an {@link AuthenticationManager} instance.
-     * @throws Exception if an error occurs while retrieving the authentication manager.
+     * @throws Exception if an error occurs while retrieving the authentication
+     *                   manager.
      */
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration configuration) throws Exception {
@@ -57,7 +61,8 @@ public class SecurityConfig {
     }
 
     /**
-     * Configures the security filter chain that defines the application's authorization rules.
+     * Configures the security filter chain that defines the application's
+     * authorization rules.
      *
      * @param http the {@link HttpSecurity} to configure.
      * @return a {@link SecurityFilterChain} instance.
@@ -68,15 +73,16 @@ public class SecurityConfig {
         http
                 .cors(Customizer.withDefaults())
                 .csrf(csrf -> csrf.disable())
-                        .authorizeHttpRequests((authorize) ->
-                                authorize
-                                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                                        .requestMatchers("/api/auth/**").permitAll() // Allow access to auth endpoints
-                                                .anyRequest().authenticated() // All other requests must be authenticated
-                        )
-                        .sessionManagement(session -> session
-                                .sessionCreationPolicy(SessionCreationPolicy.STATELESS) // Use stateless sessions
-                        );
+                .authorizeHttpRequests((authorize) -> authorize
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        .requestMatchers("/api/auth/**").permitAll()
+                        .requestMatchers("/api/admin/**").hasAuthority("ADMIN")
+                        .requestMatchers("/api/visits/**", "/api/patients/**", "/translate")
+                        .hasAnyAuthority("ASHA_KARMI", "ADMIN")
+                        .anyRequest().authenticated())
+                .sessionManagement(session -> session
+                        .sessionCreationPolicy(SessionCreationPolicy.STATELESS) // Use stateless sessions
+                );
 
         // Add our custom JWT filter before the standard authentication filter
         http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

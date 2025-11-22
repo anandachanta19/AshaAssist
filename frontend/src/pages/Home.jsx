@@ -17,6 +17,7 @@ import { useEffect, useState } from "react";
 import PhoneInput, { isValidPhoneNumber } from 'react-phone-number-input';
 import 'react-phone-number-input/style.css';
 import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 import apiClient from "../api";
 import Loading from '../components/Loading';
 
@@ -47,6 +48,7 @@ const HomePage = () => {
   const [recentVisits, setRecentVisits] = useState([]);
   const [loadingVisits, setLoadingVisits] = useState(true);
   const [errorVisits, setErrorVisits] = useState("");
+  const { user, logout } = useAuth();
 
   const fetchRecentVisits = async () => {
     try {
@@ -179,6 +181,7 @@ const HomePage = () => {
 
   const handleLogout = () => {
     localStorage.removeItem("authToken");
+    logout();
     navigate("/login");
   };
 

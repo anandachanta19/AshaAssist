@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
@@ -24,6 +25,7 @@ import lombok.Data;
 @Data
 @Entity
 @Table(name = "patients")
+@JsonIgnoreProperties({ "hibernateLazyInitializer", "handler" })
 public class Patient {
 
     @Id

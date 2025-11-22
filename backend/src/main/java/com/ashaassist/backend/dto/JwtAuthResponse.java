@@ -1,11 +1,13 @@
 package com.ashaassist.backend.dto;
 
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 /**
  * Data Transfer Object for JWT authentication responses.
  */
 @Data
+@NoArgsConstructor
 public class JwtAuthResponse {
 
     private String accessToken;
