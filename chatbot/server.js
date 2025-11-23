@@ -71,6 +71,7 @@ import express from "express";
 import ollama from "ollama";
 import connectDB from "./config/db.js";
 import Chat from "./models/Chat.js";
+import Alert from "./models/Alert.js";
 
 dotenv.config();
 connectDB();
@@ -123,7 +124,7 @@ async function translateText(text, targetLanguage) {
         console.log("   Target is English, skipping translation.");
         return text;
     }
-    
+
     console.log(`   Translating text to: ${targetLanguage}...`);
     const request = {
         parent: `projects/${GOOGLE_PROJECT_ID}/locations/global`,
@@ -223,7 +224,7 @@ app.post("/chat", async (req, res) => {
                 const documents = await cursor.toArray();
                 console.log(`   📚 Retrieved ${documents?.length} documents`);
                 if (documents?.length > 0) {
-                     docContext = documents.map((doc, i) => `Context Document ${i + 1}:\n${doc.text} (Similarity: ${doc.$similarity?.toFixed(4) || 'N/A'})`).join("\n\n");
+                    docContext = documents.map((doc, i) => `Context Document ${i + 1}:\n${doc.text} (Similarity: ${doc.$similarity?.toFixed(4) || 'N/A'})`).join("\n\n");
                     console.log(`   Context sample: "${docContext.slice(0, 100)}..."`);
                 } else { console.log("   No relevant documents found for this visit.") }
             } catch (err) { console.error("   ❌ DB query error:", err); }
@@ -284,7 +285,7 @@ END CONTEXT
  */
 async function extractStructuredData(messages, visitId) {
     console.log(`   🤖 1. Extracting structured data for Visit ID: ${visitId}`);
-    
+
     const conversationText = messages
         .map(msg => `${msg.role === 'user' ? 'Health Worker' : 'AI Assistant'}: ${msg.content}`)
         .join('\n');
@@ -309,7 +310,7 @@ JSON STRUCTURE TO FILL:
   "potential_conditions_mentioned": ["list of potential diagnoses discussed"]
 }
 `;
-    
+
     try {
         const contents = [{ role: "user", parts: [{ text: extractorPrompt }] }];
         const result = await model.generateContent({ contents });
@@ -319,7 +320,80 @@ JSON STRUCTURE TO FILL:
         return jsonData;
     } catch (error) {
         console.error("   ❌ Error during data extraction:", error);
-        throw new Error("Failed to extract structured data from AI."); 
+        throw new Error("Failed to extract structured data from AI.");
+    }
+}
+
+
+/**
+ * Run an LLM-based classifier to decide if the VISIT ANALYSIS indicates a serious condition.
+ * Uses the generated summary + structured data, NOT the raw chat logs.
+ */
+async function detectSeriousIssue(analysisText, structuredData, visitId) {
+    console.log(`   ⚠️ Running seriousness classifier on Analysis for Visit ID: ${visitId}`);
+
+    const prompt = `
+You are a Senior Medical Officer.
+Your Task: Review the **Clinical Summary** provided below and determine if a Medical Referral is strictly necessary.
+
+INPUT DATA:
+1. Clinical Summary:
+"""${analysisText}"""
+
+2. Structured Findings:
+${structuredData ? JSON.stringify(structuredData) : "None"}
+
+TRIAGE DECISION LOGIC:
+- **HIGH SEVERITY (alert: true)**: 
+  The summary indicates an immediate threat to life, limb, or vital organs. Requires emergency transport or immediate admission.
+  (Keywords to look for: "Emergency", "Urgent Referral", "Chest Indrawing", "Unconscious", "Difficulty Breathing")
+  
+- **MEDIUM SEVERITY (alert: true)**: 
+  The summary indicates a condition that requires a Doctor's diagnosis, prescription, or intervention within 24 hours. It cannot be managed by a community worker alone.
+  (Keywords to look for: "High Fever", "Infection", "Dehydration", "Refer to doctor")
+
+- **LOW SEVERITY (alert: false)**: 
+  The summary describes routine care, preventative counseling, normal checkups, or minor ailments that are self-limiting or managed with home remedies.
+
+OUTPUT INSTRUCTIONS:
+- Determine the severity based **only** on the specific details in the summary.
+- Return the JSON object below.
+- **Crucial:** Set "alert": true ONLY for HIGH or MEDIUM. Set "alert": false for LOW.
+
+JSON SCHEMA:
+{
+  "alert": boolean, 
+  "severity": "high" | "medium" | "low",
+  "label": "string (short clinical label)",
+  "reason": "string (based on the analysis provided)",
+  "recommendedAction": "string"
+}
+`;
+
+    try {
+        const result = await model.generateContent({
+            contents: [{ role: "user", parts: [{ text: prompt }] }],
+            generationConfig: { responseMimeType: "application/json" }
+        });
+
+        const parsed = JSON.parse(result.response.text());
+
+        // Sanity check
+        if (typeof parsed.alert !== 'boolean') {
+            throw new Error("Invalid JSON structure returned");
+        }
+
+        return parsed;
+
+    } catch (err) {
+        console.error("   ❌ Seriousness classifier error:", err.message);
+        return {
+            alert: false,
+            severity: "low",
+            label: "Error",
+            reason: "Could not classify analysis.",
+            recommendedAction: "Manual review required."
+        };
     }
 }
 
@@ -340,24 +414,26 @@ JSON STRUCTURE TO FILL:
  * - { analysis: string, structuredData: object }
  */
 app.post("/analyze", async (req, res) => {
-      try {
+    try {
         const { visitId, messages, targetLanguage } = req.body;
         if (!visitId) { return res.status(400).json({ error: "Missing visitId" }); }
         if (!messages || messages.length < 2) { return res.status(400).json({ error: "Insufficient chat history" }); }
         if (!targetLanguage) { return res.status(400).json({ error: "Missing targetLanguage" }); }
-        
+
         console.log(`\n🔬 ANALYZING chat for Visit ID: ${visitId}...`);
-        
+
+        // 1. Extract Structured Data
         let structuredData;
         try {
-             structuredData = await extractStructuredData(messages, visitId);
+            structuredData = await extractStructuredData(messages, visitId);
         } catch (extractionError) {
-             console.warn(`   ⚠️ Could not extract structured data. Falling back to raw text analysis.`);
-             structuredData = { error: "Extraction failed" };
+            console.warn(`   ⚠️ Could not extract structured data. Falling back to raw text analysis.`);
+            structuredData = { error: "Extraction failed" };
         }
-        
+
+        // 2. Generate Analysis Text
         const analysisPrompt = structuredData.error ?
-        `
+            `
 You are an AI healthcare assistant. Analyze the following *raw* patient visit conversation (Visit ID: ${visitId}).
 Provide a concise summary covering:
 1.  **Main Symptoms/Concerns:** List the key health issues discussed.
@@ -369,8 +445,8 @@ Conversation History:
 ${messages.map(msg => `${msg.role === 'user' ? 'Health Worker' : 'AI Assistant'}: ${msg.content}`).join('\n')}
 --------------------
 Analysis:`
-        :
-        `
+            :
+            `
 You are an AI healthcare assistant. Analyze the following *structured summary* of a patient visit (Visit ID: ${visitId}).
 Provide a concise, professional analysis in Markdown format, covering:
 1.  **Main Symptoms/Concerns:** Based on the extracted data.
@@ -386,22 +462,54 @@ Analysis:`;
 
         const contents = [{ role: "user", parts: [{ text: analysisPrompt }] }];
         const result = await model.generateContent({ contents });
-        const analysisText = result.response.text();
+        const analysisText = result.response.text(); // <--- THIS captures the text you shared
+
+        // ============================================================
+        // 3. NEW LOGIC: Detect Serious Issues using the ANALYSIS
+        // ============================================================
+        let generatedAlert = null;
+        try {
+            // UPDATED CALL: Passing analysisText AND structuredData
+            const detectionResult = await detectSeriousIssue(analysisText, structuredData, visitId);
+
+            // Only save if alert is TRUE (High/Medium)
+            if (detectionResult && detectionResult.alert) {
+                console.log(`   🚨 ALERT TRIGGERED: ${detectionResult.label} (${detectionResult.severity})`);
+
+                const newAlert = new Alert({
+                    visitId: visitId,
+                    label: detectionResult.label,
+                    severity: detectionResult.severity,
+                    reason: detectionResult.reason,
+                    recommendedAction: detectionResult.recommendedAction,
+                    triggeringMessages: messages, // Save chat history for context
+                    rawInference: detectionResult
+                });
+
+                await newAlert.save();
+                generatedAlert = detectionResult;
+            } else {
+                console.log(`   ✅ Condition assessed as LOW severity/Routine. No alert saved.`);
+            }
+        } catch (alertError) {
+            console.error("   ⚠️ Error processing seriousness alert:", alertError);
+        }
+        // ============================================================
 
         console.log(`✅ ANALYSIS COMPLETE for Visit ID: ${visitId}`);
         const translatedAnalysis = await translateText(analysisText, targetLanguage);
 
-        res.status(200).json({ 
+        res.status(200).json({
             analysis: translatedAnalysis,
-            structuredData: structuredData 
+            structuredData: structuredData,
+            alert: generatedAlert
         });
 
-    } catch (error) { 
-        console.error(`💥 Error in POST /analyze [Visit ID: ${req.body?.visitId}]:`, error); 
-        res.status(500).json({ error: "Failed to generate analysis." }); 
+    } catch (error) {
+        console.error(`💥 Error in POST /analyze [Visit ID: ${req.body?.visitId}]:`, error);
+        res.status(500).json({ error: "Failed to generate analysis." });
     }
 });
-
 
 /**
  * POST /save-chat
@@ -427,12 +535,12 @@ app.post("/save-chat", async (req, res) => {
 
         const updatedChat = await Chat.findOneAndUpdate(
             { visitId: visitId },
-            { 
-                $set: { 
-                    messages: messages, 
+            {
+                $set: {
+                    messages: messages,
                     analysis: analysis,
                     structuredData: structuredData
-                } 
+                }
             },
             { new: true, upsert: true, setDefaultsOnInsert: true }
         );
@@ -457,22 +565,22 @@ app.get("/chat/visit/:visitId", async (req, res) => {
     try {
         const visitId = req.params.visitId;
         console.log(`🔍 Fetching latest chat for Visit ID: ${visitId}`);
-        
+
         const chat = await Chat.findOne({ visitId: visitId })
-                               .sort({ updatedAt: -1 })
-                               .select('messages analysis structuredData');
+            .sort({ updatedAt: -1 })
+            .select('messages analysis structuredData');
 
         if (!chat) {
-             return res.status(200).json({ messages: [], analysis: null, structuredData: null });
+            return res.status(200).json({ messages: [], analysis: null, structuredData: null });
         }
-        res.json({ 
-            messages: chat.messages, 
+        res.json({
+            messages: chat.messages,
             analysis: chat.analysis,
             structuredData: chat.structuredData
         });
     } catch (error) {
         console.error("💥 Error fetching chat by visitId:", error);
-         if (error.name === 'CastError') { return res.status(400).json({ error: "Invalid Visit ID format" }); }
+        if (error.name === 'CastError') { return res.status(400).json({ error: "Invalid Visit ID format" }); }
         res.status(500).json({ error: "Failed to fetch chat" });
     }
 });
@@ -483,7 +591,7 @@ app.get("/chat/visit/:visitId", async (req, res) => {
  * Fetch a specific chat by its MongoDB `_id`.
  */
 app.get("/chat/:chatId", async (req, res) => {
-     try {
+    try {
         const chatId = req.params.chatId;
         console.log(`🔍 Fetching specific chat by DB ID: ${chatId}`);
         const chat = await Chat.findById(chatId);
@@ -492,6 +600,116 @@ app.get("/chat/:chatId", async (req, res) => {
     } catch (error) { console.error("💥 Error fetching chat by ID:", error); if (error.name === 'CastError') { return res.status(400).json({ error: "Invalid Chat ID format" }); } res.status(500).json({ error: "Failed to fetch chat" }); }
 });
 
+// Ensure you have imported your Chat model and configured your AI model
+// const Chat = require('./models/Chat');
+// const { GoogleGenerativeAI } = require("@google/generative-ai");
+// ... model initialization ...
+
+
+app.post("/follow-up/:visitId", async (req, res) => {
+    try {
+        const { visitId } = req.params;
+
+        // 1. Fetch previous visit details
+        const previousChat = await Chat.findOne({ visitId });
+
+        if (!previousChat) {
+            return res.status(404).json({
+                success: false,
+                message: "No previous visit found for this patient.",
+            });
+        }
+
+        const { analysis, structuredData, messages } = previousChat;
+
+        // 2. Construct the prompt
+        // UPDATED: Instructions to act like a doctor reviewing past records
+        let followUpPrompt = `
+      You are a compassionate medical assistant following up with a patient.
+
+      CONTEXT:
+      - Patient's Last Visit Analysis: ${analysis || "No previous analysis."}
+      - Structured Data: ${structuredData ? JSON.stringify(structuredData) : "None"}
+      - Recent Chat History: ${messages && messages.length > 0 ? JSON.stringify(messages.slice(-3)) : "None"}
+
+      TASK:
+      Review the "Last Visit Analysis" as if you are a doctor checking a patient's chart before entering the room.
+      Your goal is to ask a single, natural follow-up question to check on their specific condition.
+
+      GUIDELINES:
+      1. Identify the main symptom or diagnosis from the analysis (e.g., headache, fever, injury, stomach pain).
+      2. Ask specifically about that issue to see if it has improved (e.g., "How is your headache feeling today?" or "Has the fever gone down since we last spoke?").
+      3. Be warm, professional, and empathetic—like a doctor checking in on a patient's recovery.
+      4. Do NOT use generic greetings like "Hello" or "Welcome back". Start directly with the question.
+
+      OUTPUT:
+      Only the question text.
+    `;
+
+        // 3. Generate the question
+        const result = await model.generateContent(followUpPrompt);
+        const response = await result.response;
+        const botQuestion = response.text().trim();
+
+        // 4. IMPORTANT: Save this new message to the Database
+        // If we don't save this now, a page refresh will wipe this question out.
+        const newMessage = {
+            role: 'model', // or 'assistant' depending on your schema
+            content: botQuestion,
+            timestamp: new Date()
+        };
+
+        previousChat.messages.push(newMessage);
+        await previousChat.save();
+
+        // 5. Send response to Frontend
+        res.json({
+            success: true,
+            followUpQuestion: botQuestion,
+        });
+
+    } catch (error) {
+        console.error("FOLLOW UP ERROR:", error);
+        res.status(500).json({ success: false, message: "Server error", error: error.message });
+    }
+});
+
+
+
+
+// NEW endpoint to fetch alerts for a visit
+
+app.get("/alerts/dashboard", async (req, res) => {
+    try {
+        const summary = await Alert.aggregate([
+            {
+                $group: {
+                    _id: "$visitId",
+                    totalAlerts: { $sum: 1 },
+                    highestSeverity: { $max: "$severity" },
+                    latestAlertDate: { $max: "$createdAt" },
+                    alerts: {
+                        $push: {
+                            _id: "$_id",
+                            label: "$label",
+                            severity: "$severity",
+                            createdAt: "$createdAt",
+                            reason: "$reason",
+                            recommendedAction: "$recommendedAction",
+                            triggeringMessages: "$triggeringMessages"
+                        }
+                    }
+                }
+            },
+            { $sort: { latestAlertDate: -1 } }
+        ]);
+
+        res.json({ dashboardData: summary });
+    } catch (error) {
+        console.error("💥 Error fetching alerts dashboard:", error);
+        res.status(500).json({ error: "Failed to fetch dashboard data" });
+    }
+});
 
 const PORT = process.env.PORT || 8001;
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));

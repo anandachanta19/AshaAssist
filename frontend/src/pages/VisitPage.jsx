@@ -1,8 +1,10 @@
 /**
  * @file VisitPage.jsx
- * @description Unified chat interface with role-based access control.
- * - User (Asha Karmi): Full access (Chat, Voice, Translate, End & Analyze).
- * - Admin: Read-only access (View history only).
+ * @description Unified chat interface.
+ * Features:
+ * 1. Role-Based Access: Admin (Read-Only) vs Asha Karmi (Full Access).
+ * 2. Continue Chat Flow: existing chats require a "Continue" action to resume context.
+ * 3. Text-to-Speech & Translation: Integrated directly into the chat stream.
  */
 
 import axios from 'axios';
@@ -11,7 +13,7 @@ import ReactMarkdown from 'react-markdown';
 import { useNavigate, useParams } from 'react-router-dom';
 import apiClient from '../api';
 import Loading from '../components/Loading';
-import { useAuth } from '../context/AuthContext'; // --- ADDED: Import Auth Context ---
+import { useAuth } from '../context/AuthContext';
 
 const NODE_BACKEND_URL = 'http://localhost:8001';
 
@@ -26,6 +28,7 @@ const useChat = (visitId, initialMessages = [], speechLang) => {
     const [translatingMessageId, setTranslatingMessageId] = useState(null);
 
     useEffect(() => {
+        // Sync messages when initialMessages load
         if (initialMessages.length > 0 && messages.length === 0) {
             setMessages(initialMessages);
         }
@@ -52,14 +55,16 @@ const useChat = (visitId, initialMessages = [], speechLang) => {
         setInput("");
         setTranslatingMessageId(userMessageId);
 
-        let translatedContent = originalContent;
+        let translatedContent;
 
         try {
             const translateResponse = await apiClient.post('/translate', { text: originalContent });
             translatedContent = translateResponse.data;
+
             setMessages(prev => prev.map(msg =>
                 msg.id === userMessageId ? { ...msg, isTranslating: false, translatedContent: translatedContent } : msg
             ));
+
         } catch (translateError) {
             console.error("Translation error:", translateError);
             setMessages(prev => prev.filter(msg => msg.id !== userMessageId));
@@ -71,7 +76,8 @@ const useChat = (visitId, initialMessages = [], speechLang) => {
         }
 
         setIsLoadingAI(true);
-        await sendMessage({ ...userMessage, isTranslating: false, translatedContent: translatedContent });
+        const updatedUserMessage = { ...userMessage, isTranslating: false, translatedContent: translatedContent };
+        await sendMessage(updatedUserMessage);
     };
 
     const sendMessage = async (userMessageObject) => {
@@ -79,23 +85,19 @@ const useChat = (visitId, initialMessages = [], speechLang) => {
         setMessages(prev => [...prev, { id: assistantThinkingMessageId, role: "assistant", content: "Assistant is thinking..." }]);
 
         try {
-            const historyForAI = messages
-                .filter(m => m.id !== assistantThinkingMessageId)
-                .map(msg => {
+            const historyForAI = [
+                ...messages.filter(m => m.id !== assistantThinkingMessageId).map(msg => {
                     if (msg.role === 'user') {
                         return { role: 'user', content: msg.translatedContent || msg.content };
                     }
                     return { role: 'model', content: msg.content };
-                });
-
-            const finalPayload = [
-                ...historyForAI,
+                }),
                 { role: 'user', content: userMessageObject.translatedContent }
             ];
 
             const response = await axios.post(`${NODE_BACKEND_URL}/chat`, {
                 visitId: visitId,
-                messages: finalPayload,
+                messages: historyForAI,
                 targetLanguage: speechLang
             });
 
@@ -124,26 +126,29 @@ const useChat = (visitId, initialMessages = [], speechLang) => {
 
 /**
  * @component VisitPage
- * @description Main chat component. Handles Admin vs User view.
+ * @description Main fused component.
  */
 const VisitPage = () => {
     const { visitId } = useParams();
     const navigate = useNavigate();
 
-    // --- ADDED: Get User Context for Role Check ---
+    // --- Auth Context & Role Check ---
     const { user } = useAuth();
-    const isAdmin = user?.role === 'ADMIN'; // Check if current user is admin
+    const isAdmin = user?.role === 'ADMIN';
 
+    // --- State ---
     const [visit, setVisit] = useState(null);
     const [loadingVisit, setLoadingVisit] = useState(true);
     const [error, setError] = useState('');
     const [isAnalyzing, setIsAnalyzing] = useState(false);
-
     const [initialMessages, setInitialMessages] = useState([]);
     const [loadingHistory, setLoadingHistory] = useState(true);
     const [lastAnalysis, setLastAnalysis] = useState(null);
-
     const [speechLang, setSpeechLang] = useState('hi-IN');
+
+    // --- State: "Continue Chat" Logic (User Only) ---
+    const [isChatInputActive, setIsChatInputActive] = useState(true);
+    const [isContinuing, setIsContinuing] = useState(false);
 
     const { messages, setMessages, input, setInput, handleInputChange, handleSubmit, isLoading } = useChat(visitId, initialMessages, speechLang);
 
@@ -151,12 +156,13 @@ const VisitPage = () => {
     const recognitionRef = useRef(null);
     const scrollRef = useRef(null);
 
+    // --- Text-to-Speech ---
     const handleSpeak = (textToSpeak, lang) => {
         window.speechSynthesis.cancel();
+        // Improved Regex from V2 for better pacing
         const cleanText = textToSpeak.replace(/[*#]/g, '').replace(/\n/g, ' . ');
         const utterance = new SpeechSynthesisUtterance(cleanText);
         utterance.lang = lang;
-
         const voices = window.speechSynthesis.getVoices();
         const voice = voices.find(v => v.lang === lang) || voices.find(v => v.lang.startsWith(lang.split('-')[0]));
         if (voice) {
@@ -165,8 +171,10 @@ const VisitPage = () => {
         window.speechSynthesis.speak(utterance);
     };
 
+    // --- Fetch Data ---
     useEffect(() => {
         let isMounted = true;
+
         const fetchChatHistory = async () => {
             if (!isMounted) return;
             setLoadingHistory(true);
@@ -176,22 +184,20 @@ const VisitPage = () => {
                     const loadedMessages = response.data.messages || [];
                     const loadedAnalysis = response.data.analysis;
                     setLastAnalysis(loadedAnalysis);
-                    if (loadedAnalysis) {
-                        setInitialMessages([
-                            ...loadedMessages,
-                            {
-                                id: 'analysis-loaded-' + Date.now(),
-                                role: 'assistant',
-                                content: loadedAnalysis,
-                                isAnalysis: true,
-                                isLastAnalysis: true
-                            }
-                        ]);
+
+                    // --- Logic: Lock Input if history exists AND not Admin ---
+                    // Admins see read-only view anyway, so this mainly affects Asha Karmi
+                    if ((loadedMessages.length > 0 || loadedAnalysis) && !isAdmin) {
+                        setIsChatInputActive(false); // Show "Continue Chat" button
                     } else {
-                        setInitialMessages(loadedMessages);
+                        setIsChatInputActive(true); // Show Input immediately
                     }
+
+                    if (loadedAnalysis) {
+                        setInitialMessages([...loadedMessages, { id: 'analysis-loaded-' + Date.now(), role: 'assistant', content: loadedAnalysis, isAnalysis: true, isLastAnalysis: true }]);
+                    } else { setInitialMessages(loadedMessages); }
                 }
-            } catch (err) { console.error("Error fetching history:", err); setError("Could not load history."); }
+            } catch (err) { console.error("Error fetching chat history:", err); setError("Could not load previous chat history."); }
             finally { if (isMounted) setLoadingHistory(false); }
         };
 
@@ -201,15 +207,16 @@ const VisitPage = () => {
             try {
                 const response = await apiClient.get(`/visits/${visitId}`);
                 if (isMounted) setVisit(response.data);
-            } catch (err) { console.error("Error fetching visit:", err); if (isMounted && !error) setError('Failed to load visit details.'); }
+            } catch (err) { console.error("Error fetching visit for header:", err); if (isMounted && !error) setError('Failed to load visit details.'); }
             finally { if (isMounted) setLoadingVisit(false); }
         };
 
         fetchVisitData();
         fetchChatHistory();
         return () => { isMounted = false; };
-    }, [visitId]);
+    }, [visitId, isAdmin]); // Added isAdmin to dep array
 
+    // --- Save Chat ---
     const saveChatSession = async (analysisToSave, structuredDataToSave) => {
         try {
             await axios.post(`${NODE_BACKEND_URL}/save-chat`, {
@@ -220,13 +227,14 @@ const VisitPage = () => {
                 analysis: analysisToSave,
                 structuredData: structuredDataToSave
             });
-            console.log("Saved successfully.");
+            console.log("Chat session saved successfully.");
         } catch (err) {
-            console.error("Save failed:", err);
+            console.error("Failed to save chat:", err);
             setError("Could not save chat session.");
         }
     };
 
+    // --- End Session (User Only) ---
     const handleEndSession = async () => {
         if (isLoading || isAnalyzing || messages.length < 2) return;
         setIsAnalyzing(true);
@@ -236,7 +244,7 @@ const VisitPage = () => {
                 .filter(m => !m.isAnalysis)
                 .map(m => ({
                     role: m.role,
-                    content: (m.role === 'user' && m.translatedContent) ? m.translatedContent : m.content
+                    content: (m.role === 'user' ? m.translatedContent : m.content) || m.content
                 }));
 
             const analysisResponse = await axios.post(`${NODE_BACKEND_URL}/analyze`, {
@@ -261,13 +269,41 @@ const VisitPage = () => {
             await saveChatSession(newAnalysisText, newStructuredData);
 
         } catch (err) {
-            console.error("Analysis failed:", err);
-            setError("Could not generate analysis.");
+            console.error("Failed to get analysis:", err);
+            setError("Could not generate session analysis.");
         } finally {
             setIsAnalyzing(false);
         }
     };
 
+    // --- Continue Chat (User Only) ---
+    const handleContinueChat = async () => {
+        if (isAdmin) return; // Guard clause
+        setIsContinuing(true);
+        try {
+            // Hit specific endpoint to resume context
+            const response = await axios.post(`${NODE_BACKEND_URL}/follow-up/${visitId}`);
+
+            if (response.data && response.data.success && response.data.followUpQuestion) {
+                const followUpMessage = {
+                    id: Date.now(),
+                    role: 'assistant',
+                    content: response.data.followUpQuestion
+                };
+                setMessages(prev => [...prev, followUpMessage]);
+            }
+
+            setIsChatInputActive(true); // Unlock UI
+        } catch (err) {
+            console.error("Error resuming chat:", err);
+            setIsChatInputActive(true); // Unlock UI anyway
+            setError("Failed to load follow-up question, but you can continue chatting.");
+        } finally {
+            setIsContinuing(false);
+        }
+    };
+
+    // --- Speech Recognition ---
     const handleListenToggle = () => {
         if (isListening) {
             if (recognitionRef.current) { recognitionRef.current.stop(); }
@@ -297,6 +333,7 @@ const VisitPage = () => {
         }
     };
 
+    // --- Auto-scroll ---
     useEffect(() => {
         if (scrollRef.current) {
             scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -306,17 +343,8 @@ const VisitPage = () => {
 
     if (loadingVisit || loadingHistory) return (
         <div className="flex flex-col h-screen bg-gray-900 text-white">
-            <header className="px-6 py-4 border-b border-gray-700 flex-shrink-0">
-                <div className="flex justify-between items-center mb-2">
-                    <button onClick={() => navigate(-1)} className="text-blue-400 hover:underline">← Back</button>
-                    <div className="w-40 h-9 bg-gray-700 rounded-lg animate-pulse" />
-                </div>
-                <div className="flex justify-between items-center">
-                    <h1 className="text-2xl font-bold">Chat</h1>
-                </div>
-            </header>
             <div className="flex-1 flex items-center justify-center">
-                <Loading text="Loading Visit Data..." size="md" />
+                <Loading size="lg" color="white" text="Loading chat..." />
             </div>
         </div>
     );
@@ -326,128 +354,127 @@ const VisitPage = () => {
             {/* Header */}
             <header className="px-6 py-4 border-b border-gray-700 flex-shrink-0">
                 <div className="flex justify-between items-center mb-2">
-                    {/* --- MODIFIED: Back Button Logic --- */}
-                    <button
-                        onClick={() => navigate(-1)}
-                        className="text-blue-400 hover:underline"
-                    >
-                        {'← Back'}
-                    </button>
+                    <button onClick={() => navigate('/home')} className="text-blue-400 hover:underline">← Back</button>
 
-                    {/* --- MODIFIED: Hide End & Analyze button for Admin --- */}
+                    {/* Only show "End & Analyze" for Non-Admins */}
                     {!isAdmin && (
-                        <button
-                            onClick={handleEndSession}
-                            disabled={isLoading || isAnalyzing || messages.length < 2
-                            }
-                            className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg disabled:bg-gray-500 disabled:cursor-not-allowed"
-                        >
-                            {
-                                isAnalyzing ? (
-                                    <span className="inline-flex items-center gap-2" > <Loading size="xs" inline color="white" />Analyzing...</span>
-                                ) : 'End & Analyze'}
-                        </button >
+                        <button onClick={handleEndSession} disabled={isLoading || isAnalyzing || messages.length < 2} className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg disabled:bg-gray-500 disabled:cursor-not-allowed">
+                            {isAnalyzing ? (
+                                <span className="inline-flex items-center gap-2"><Loading size="xs" inline color="white" />Analyzing...</span>
+                            ) : 'End & Analyze'}
+                        </button>
                     )}
-                </div >
+                    {isAdmin && <div className="px-3 py-1 bg-gray-700 rounded text-sm text-gray-300">Read Only Mode</div>}
+                </div>
                 <div className="flex justify-between items-center">
                     <h1 className="text-2xl font-bold">Chat</h1>
                     <p className="text-gray-400 text-lg">Patient: {visit?.patient?.fullName || 'N/A'}</p>
                 </div>
-            </header >
+            </header>
 
             {/* Main Chat Area */}
-            < div className="flex-1 flex flex-col overflow-y-hidden" >
-                {/* Chat Messages Section */}
-                < section ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-6" >
-                    {/* Initial Welcome Message */}
-                    < div className="flex items-start gap-3" >
+            <div className="flex-1 flex flex-col overflow-y-hidden">
+                <section ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-6">
+                    {/* Welcome Message */}
+                    <div className="flex items-start gap-3">
                         <div className="flex items-start gap-2 group">
                             <div className="p-3 rounded-2xl max-w-lg bg-gray-700 text-gray-200">
                                 <p className="text-sm leading-relaxed pr-8">
                                     {isAdmin ? "Viewing chat history (Read-Only)." : "AI assistant. Use mic for selected language."}
                                 </p>
                             </div>
-                            {/* Speaker button is always useful, even for Admin review */}
                             <button
                                 onClick={() => handleSpeak(isAdmin ? "Viewing chat history." : "AI assistant. Use mic for selected language.", speechLang)}
                                 className="p-1 text-gray-500 hover:text-gray-300 transition-opacity opacity-0 group-hover:opacity-100 flex-shrink-0"
                                 title="Read aloud"
                             >
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M10 3a1 1 0 011 1v12a1 1 0 11-2 0V4a1 1 0 011-1zM4 9a1 1 0 011 1v.01A7.002 7.002 0 0011 17v1.99A9.002 9.002 0 012 10.01V10a1 1 0 011-1zM16 10a1 1 0 011-1v.01A9.002 9.002 0 019 18.99V17a7.002 7.002 0 006-6.99V10z" /></svg>
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fillRule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217zM14.657 2.929a1 1 0 011.414 0A9.972 9.972 0 0119 10a9.972 9.972 0 01-2.929 7.071 1 1 0 01-1.414-1.414A7.971 7.971 0 0017 10c0-2.21-.894-4.208-2.343-5.657a1 1 0 010-1.414zm-2.829 2.828a1 1 0 011.415 0A5.983 5.983 0 0115 10a5.984 5.984 0 01-1.757 4.243 1 1 0 01-1.415-1.415A3.984 3.984 0 0013 10a3.983 3.983 0 00-1.172-2.828 1 1 0 010-1.415z" clipRule="evenodd" />
+                                </svg>
                             </button>
                         </div>
-                    </div >
+                    </div>
 
-                    {/* Dynamic Messages */}
-                    {
-                        messages.map((m) => (
-                            (m.content && m.content !== "") || m.isTranslating ? (
-                                <div key={m.id || Math.random()} className={`flex items-start gap-3 ${m.role === 'user' ? 'flex-row-reverse' : ''}`}>
-                                    <div className="flex items-start gap-2 group">
+                    {/* Messages */}
+                    {messages.map((m) => (
+                        (m.content && m.content !== "") || m.isTranslating ? (
+                            <div key={m.id || Math.random()} className={`flex items-start gap-3 ${m.role === 'user' ? 'flex-row-reverse' : ''}`}>
+                                <div className="flex items-start gap-2 group">
+                                    {/* Bubble Style */}
+                                    <div className={`p-3 rounded-2xl max-w-lg relative ${m.role === 'user' ? 'bg-blue-500 text-white' : m.isAnalysis ? m.isLastAnalysis ? 'bg-gray-800 border border-yellow-500/30' : 'bg-gray-800 border border-green-500/30' : 'bg-gray-700 text-gray-200'}`}>
 
-                                        {/* Message Bubble */}
-                                        <div className={`p-3 rounded-2xl max-w-lg relative ${m.role === 'user' ? 'bg-blue-500 text-white' : m.isAnalysis ? m.isLastAnalysis ? 'bg-gray-800 border border-yellow-500/30' : 'bg-gray-800 border border-green-500/30' : 'bg-gray-700 text-gray-200'
-                                            }`}>
-                                            {m.role === 'assistant' && m.content === 'Assistant is thinking...' ? (
-                                                <span className="text-sm italic flex items-center gap-2">
-                                                    <Loading size="xs" inline color="white" text="Thinking..." />
-                                                </span>
-                                            ) : m.isAnalysis ? (
-                                                <div className="pr-8">
-                                                    <h4 className={`font-semibold mb-2 ${m.isLastAnalysis ? 'text-yellow-400' : 'text-green-400'}`}>
-                                                        {m.isLastAnalysis ? 'Last Session Analysis' : 'Current Session Analysis'}
-                                                    </h4>
-                                                    <div className="text-sm text-gray-200 prose prose-invert prose-sm">
-                                                        <ReactMarkdown>{m.content}</ReactMarkdown>
-                                                    </div>
+                                        {m.role === 'assistant' && m.content === 'Assistant is thinking...' ? (
+                                            <span className="text-sm italic flex items-center gap-2">
+                                                <Loading size="xs" inline color="white" text="Thinking..." />
+                                            </span>
+                                        ) : m.isAnalysis ? (
+                                            <div className="pr-8">
+                                                <h4 className={`font-semibold mb-2 ${m.isLastAnalysis ? 'text-yellow-400' : 'text-green-400'}`}>
+                                                    {m.isLastAnalysis ? 'Last Session Analysis' : 'Current Session Analysis'}
+                                                </h4>
+                                                <div className="text-sm text-gray-200 prose prose-invert prose-sm">
+                                                    <ReactMarkdown>{m.content}</ReactMarkdown>
                                                 </div>
-                                            ) : (
-                                                <p className="text-sm leading-relaxed whitespace-pre-wrap pr-8">
-                                                    {m.content}
-                                                    {m.role === 'user' && m.isTranslating && (<span className="ml-2 inline-flex items-center space-x-1 opacity-70"> <span className="h-1 w-1 bg-white rounded-full animate-bounce [animation-delay:-0.3s]"></span> <span className="h-1 w-1 bg-white rounded-full animate-bounce [animation-delay:-0.15s]"></span> <span className="h-1 w-1 bg-white rounded-full animate-bounce"></span> </span>)}
-                                                </p>
-                                            )}
+                                            </div>
+                                        ) : (
+                                            <p className="text-sm leading-relaxed whitespace-pre-wrap pr-8">
+                                                {m.content}
+                                                {m.isTranslating && (<span className="ml-2 inline-flex items-center space-x-1 opacity-70"> <span className="h-1 w-1 bg-white rounded-full animate-bounce [animation-delay:-0.3s]"></span> <span className="h-1 w-1 bg-white rounded-full animate-bounce [animation-delay:-0.15s]"></span> <span className="h-1 w-1 bg-white rounded-full animate-bounce"></span> </span>)}
+                                            </p>
+                                        )}
 
-                                            {/* Speaker Button - Positioned Top Right inside Bubble */}
-                                            {m.role === 'assistant' && !m.isAnalysis && m.content !== 'Assistant is thinking...' && (
-                                                <button
-                                                    onClick={() => handleSpeak(m.content, speechLang)}
-                                                    className="absolute top-2 right-2 p-1 text-gray-500 hover:text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity"
-                                                    title="Read aloud"
-                                                >
-                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M10 3a1 1 0 011 1v12a1 1 0 11-2 0V4a1 1 0 011-1zM4 9a1 1 0 011 1v.01A7.002 7.002 0 0011 17v1.99A9.002 9.002 0 012 10.01V10a1 1 0 011-1zM16 10a1 1 0 011-1v.01A9.002 9.002 0 019 18.99V17a7.002 7.002 0 006-6.99V10z" /></svg>
-                                                </button>
-                                            )}
-                                            {/* Also enable for analysis blocks */}
-                                            {m.isAnalysis && (
-                                                <button
-                                                    onClick={() => handleSpeak(m.content, speechLang)}
-                                                    className="absolute top-2 right-2 p-1 text-gray-500 hover:text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity"
-                                                    title="Read aloud"
-                                                >
-                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M10 3a1 1 0 011 1v12a1 1 0 11-2 0V4a1 1 0 011-1zM4 9a1 1 0 011 1v.01A7.002 7.002 0 0011 17v1.99A9.002 9.002 0 012 10.01V10a1 1 0 011-1zM16 10a1 1 0 011-1v.01A9.002 9.002 0 019 18.99V17a7.002 7.002 0 006-6.99V10z" /></svg>
-                                                </button>
-                                            )}
-                                        </div>
+                                        {/* Speaker Button on individual messages */}
+                                        {m.content !== 'Assistant is thinking...' && (
+                                            <button
+                                                onClick={() => handleSpeak(m.content, speechLang)}
+                                                className="absolute top-2 right-2 p-1 text-gray-500 hover:text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                title="Read aloud"
+                                            >
+                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                                    <path fillRule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217zM14.657 2.929a1 1 0 011.414 0A9.972 9.972 0 0119 10a9.972 9.972 0 01-2.929 7.071 1 1 0 01-1.414-1.414A7.971 7.971 0 0017 10c0-2.21-.894-4.208-2.343-5.657a1 1 0 010-1.414zm-2.829 2.828a1 1 0 011.415 0A5.983 5.983 0 0115 10a5.984 5.984 0 01-1.757 4.243 1 1 0 01-1.415-1.415A3.984 3.984 0 0013 10a3.983 3.983 0 00-1.172-2.828 1 1 0 010-1.415z" clipRule="evenodd" />
+                                                </svg>
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
-                            ) : null
-                        ))
-                    }
-                </section >
+                            </div>
+                        ) : null
+                    ))}
+                </section>
 
                 {error && <p className="px-6 text-red-400 text-sm">{error}</p>}
 
-                {/* --- MODIFIED: Hide Footer entirely for Admin --- */}
-                {
-                    !isAdmin && (
-                        <footer className="px-6 py-4 border-t border-gray-700 flex-shrink-0">
+                {/* Footer: Admin sees NOTHING. User sees Continue OR Input. */}
+                {!isAdmin && (
+                    <footer className="px-6 py-4 border-t border-gray-700 flex-shrink-0">
+                        {!isChatInputActive ? (
+                            // --- Continue Chat Button (History exists, User Mode) ---
+                            <div className="flex items-center justify-center w-full">
+                                <button
+                                    onClick={handleContinueChat}
+                                    disabled={isContinuing}
+                                    className="px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl shadow-lg transition-transform transform active:scale-95 flex items-center gap-2 disabled:bg-blue-800 disabled:cursor-wait"
+                                >
+                                    {isContinuing ? (
+                                        <> <Loading size="xs" inline color="white" /> Resuming... </>
+                                    ) : (
+                                        <>
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                            </svg>
+                                            Continue Previous Chat
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                        ) : (
+                            // --- Standard Input Form (New Chat or Continued) ---
                             <form onSubmit={handleSubmit} className="flex items-center gap-3">
                                 <select
                                     value={speechLang}
                                     onChange={(e) => setSpeechLang(e.target.value)}
                                     className="h-10 px-2 bg-gray-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    aria-label="Select speech language"
                                     disabled={isLoading || isListening || isAnalyzing}
                                 >
                                     <option value="hi-IN">Hindi</option>
@@ -483,11 +510,11 @@ const VisitPage = () => {
                                     ➤
                                 </button>
                             </form>
-                        </footer>
-                    )
-                }
-            </div >
-        </div >
+                        )}
+                    </footer>
+                )}
+            </div>
+        </div>
     );
 };
 
