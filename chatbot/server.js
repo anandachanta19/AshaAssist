@@ -70,8 +70,8 @@ import dotenv from "dotenv";
 import express from "express";
 import ollama from "ollama";
 import connectDB from "./config/db.js";
-import Chat from "./models/Chat.js";
 import Alert from "./models/Alert.js";
+import Chat from "./models/Chat.js";
 
 dotenv.config();
 connectDB();
@@ -576,7 +576,8 @@ app.get("/chat/visit/:visitId", async (req, res) => {
         res.json({
             messages: chat.messages,
             analysis: chat.analysis,
-            structuredData: chat.structuredData
+            structuredData: chat.structuredData,
+            alert: await Alert.findOne({ visitId: visitId }).sort({ createdAt: -1 })
         });
     } catch (error) {
         console.error("💥 Error fetching chat by visitId:", error);

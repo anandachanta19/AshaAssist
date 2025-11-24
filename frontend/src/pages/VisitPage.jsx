@@ -145,6 +145,8 @@ const VisitPage = () => {
     const [initialMessages, setInitialMessages] = useState([]);
     const [loadingHistory, setLoadingHistory] = useState(true);
     const [lastAnalysis, setLastAnalysis] = useState(null);
+    const [alert, setAlert] = useState(null);
+    const [structuredData, setStructuredData] = useState(null);
     const [speechLang, setSpeechLang] = useState('hi-IN');
 
     // --- State: "Continue Chat" Logic (User Only) ---
@@ -246,6 +248,8 @@ const VisitPage = () => {
                     const loadedMessages = response.data.messages || [];
                     const loadedAnalysis = response.data.analysis;
                     setLastAnalysis(loadedAnalysis);
+                    setAlert(response.data.alert);
+                    setStructuredData(response.data.structuredData);
 
                     // --- Logic: Lock Input if history exists AND not Admin ---
                     if ((loadedMessages.length > 0 || loadedAnalysis) && !isAdmin) {
@@ -327,6 +331,8 @@ const VisitPage = () => {
 
             setMessages(prev => [...prev.filter(m => !m.isLastAnalysis), analysisMessage]);
             setLastAnalysis(newAnalysisText);
+            setAlert(analysisResponse.data.alert);
+            setStructuredData(newStructuredData);
             await saveChatSession(newAnalysisText, newStructuredData);
 
         } catch (err) {
@@ -488,11 +494,69 @@ const VisitPage = () => {
                                                 <Loading size="xs" inline color="white" text="Thinking..." />
                                             </span>
                                         ) : m.isAnalysis ? (
-                                            <div className="pr-8">
-                                                <h4 className={`font-semibold mb-2 ${m.isLastAnalysis ? 'text-yellow-400' : 'text-green-400'}`}>
+                                            <div className="pr-8 w-full">
+                                                <h4 className={`font-semibold mb-4 flex items-center gap-2 ${m.isLastAnalysis ? 'text-yellow-400' : 'text-green-400'}`}>
                                                     {m.isLastAnalysis ? 'Last Session Analysis' : 'Current Session Analysis'}
                                                 </h4>
-                                                <div className="text-sm text-gray-200 prose prose-invert prose-sm">
+
+                                                {/* Severity Alert Badge */}
+                                                {alert && m.isLastAnalysis && (
+                                                    <div className={`mb-4 p-3 rounded-xl border ${alert.severity === 'high' ? 'bg-red-900/30 border-red-500 text-red-200' : alert.severity === 'medium' ? 'bg-orange-900/30 border-orange-500 text-orange-200' : 'bg-green-900/30 border-green-500 text-green-200'}`}>
+                                                        <div className="flex items-center gap-2 mb-1">
+                                                            <span className="text-lg font-bold uppercase tracking-wider">{alert.severity} SEVERITY</span>
+                                                            {alert.severity === 'high' && <span className="animate-pulse">⚠️</span>}
+                                                        </div>
+                                                        <p className="font-semibold text-sm">{alert.label}</p>
+                                                        <p className="text-xs opacity-80 mt-1">{alert.reason}</p>
+                                                        {alert.recommendedAction && (
+                                                            <div className="mt-2 pt-2 border-t border-white/10 text-xs font-medium">
+                                                                Recommended: {alert.recommendedAction}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
+
+                                                {/* Structured Data Chips */}
+                                                {structuredData && m.isLastAnalysis && (
+                                                    <div className="mb-4 space-y-3">
+                                                        {structuredData.main_complaint && (
+                                                            <div className="bg-gray-900/50 p-2 rounded-lg">
+                                                                <span className="text-xs text-gray-400 uppercase block mb-1">Main Complaint</span>
+                                                                <span className="text-sm font-medium text-white">{structuredData.main_complaint}</span>
+                                                            </div>
+                                                        )}
+
+                                                        {structuredData.all_symptoms && structuredData.all_symptoms.length > 0 && (
+                                                            <div>
+                                                                <span className="text-xs text-gray-400 uppercase block mb-1">Symptoms</span>
+                                                                <div className="flex flex-wrap gap-2">
+                                                                    {structuredData.all_symptoms.map((sym, idx) => (
+                                                                        <span key={idx} className="px-2 py-1 bg-blue-900/40 border border-blue-700/50 rounded-md text-xs text-blue-200">
+                                                                            {sym.symptom} {sym.severity && <span className="opacity-60">({sym.severity})</span>}
+                                                                        </span>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        )}
+
+                                                        <div className="grid grid-cols-2 gap-2">
+                                                            {structuredData.duration_mentioned && (
+                                                                <div className="bg-gray-900/50 p-2 rounded-lg">
+                                                                    <span className="text-xs text-gray-400 uppercase block mb-1">Duration</span>
+                                                                    <span className="text-sm text-gray-300">{structuredData.duration_mentioned}</span>
+                                                                </div>
+                                                            )}
+                                                            {structuredData.medications_mentioned && structuredData.medications_mentioned.length > 0 && (
+                                                                <div className="bg-gray-900/50 p-2 rounded-lg">
+                                                                    <span className="text-xs text-gray-400 uppercase block mb-1">Meds</span>
+                                                                    <span className="text-sm text-gray-300">{structuredData.medications_mentioned.join(', ')}</span>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                <div className="text-sm text-gray-200 prose prose-invert prose-sm max-w-none">
                                                     <ReactMarkdown>{m.content}</ReactMarkdown>
                                                 </div>
                                             </div>
