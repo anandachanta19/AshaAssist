@@ -494,69 +494,72 @@ const VisitPage = () => {
                                                 <Loading size="xs" inline color="white" text="Thinking..." />
                                             </span>
                                         ) : m.isAnalysis ? (
-                                            <div className="pr-8 w-full">
-                                                <h4 className={`font-semibold mb-4 flex items-center gap-2 ${m.isLastAnalysis ? 'text-yellow-400' : 'text-green-400'}`}>
-                                                    {m.isLastAnalysis ? 'Last Session Analysis' : 'Current Session Analysis'}
-                                                </h4>
+                                            <div className="w-full space-y-4">
+                                                {/* Header & Severity */}
+                                                <div className="flex items-center justify-between border-b border-gray-600 pb-3 mb-2">
+                                                    <h4 className={`font-bold text-lg flex items-center gap-2 ${m.isLastAnalysis ? 'text-yellow-400' : 'text-green-400'}`}>
+                                                        {m.isLastAnalysis ? 'Last Session Analysis' : 'Current Session Analysis'}
+                                                    </h4>
+                                                    {alert && m.isLastAnalysis && (
+                                                        <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider border ${alert.severity === 'high' ? 'bg-red-900/50 border-red-500 text-red-200 animate-pulse' : alert.severity === 'medium' ? 'bg-orange-900/50 border-orange-500 text-orange-200' : 'bg-green-900/50 border-green-500 text-green-200'}`}>
+                                                            {alert.severity} Severity
+                                                        </span>
+                                                    )}
+                                                </div>
 
-                                                {/* Severity Alert Badge */}
-                                                {alert && m.isLastAnalysis && (
-                                                    <div className={`mb-4 p-3 rounded-xl border ${alert.severity === 'high' ? 'bg-red-900/30 border-red-500 text-red-200' : alert.severity === 'medium' ? 'bg-orange-900/30 border-orange-500 text-orange-200' : 'bg-green-900/30 border-green-500 text-green-200'}`}>
-                                                        <div className="flex items-center gap-2 mb-1">
-                                                            <span className="text-lg font-bold uppercase tracking-wider">{alert.severity} SEVERITY</span>
-                                                            {alert.severity === 'high' && <span className="animate-pulse">⚠️</span>}
-                                                        </div>
-                                                        <p className="font-semibold text-sm">{alert.label}</p>
-                                                        <p className="text-xs opacity-80 mt-1">{alert.reason}</p>
+                                                {/* Alert Details (if high/medium) */}
+                                                {alert && m.isLastAnalysis && (alert.severity === 'high' || alert.severity === 'medium') && (
+                                                    <div className={`p-4 rounded-xl border ${alert.severity === 'high' ? 'bg-red-900/20 border-red-500/50' : 'bg-orange-900/20 border-orange-500/50'}`}>
+                                                        <p className="font-semibold text-sm text-white mb-1">{alert.label}</p>
+                                                        <p className="text-xs text-gray-300 mb-2">{alert.reason}</p>
                                                         {alert.recommendedAction && (
-                                                            <div className="mt-2 pt-2 border-t border-white/10 text-xs font-medium">
-                                                                Recommended: {alert.recommendedAction}
+                                                            <div className="flex items-start gap-2 mt-2 pt-2 border-t border-white/10">
+                                                                <span className="text-lg">👉</span>
+                                                                <span className="text-sm font-medium text-white">{alert.recommendedAction}</span>
                                                             </div>
                                                         )}
                                                     </div>
                                                 )}
 
-                                                {/* Structured Data Chips */}
+                                                {/* Structured Data Grid */}
                                                 {structuredData && m.isLastAnalysis && (
-                                                    <div className="mb-4 space-y-3">
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                                         {structuredData.main_complaint && (
-                                                            <div className="bg-gray-900/50 p-2 rounded-lg">
-                                                                <span className="text-xs text-gray-400 uppercase block mb-1">Main Complaint</span>
+                                                            <div className="bg-gray-900/40 p-3 rounded-lg border border-gray-700/50">
+                                                                <span className="text-[10px] uppercase tracking-wider text-gray-400 block mb-1">Main Complaint</span>
                                                                 <span className="text-sm font-medium text-white">{structuredData.main_complaint}</span>
                                                             </div>
                                                         )}
-
+                                                        {structuredData.duration_mentioned && (
+                                                            <div className="bg-gray-900/40 p-3 rounded-lg border border-gray-700/50">
+                                                                <span className="text-[10px] uppercase tracking-wider text-gray-400 block mb-1">Duration</span>
+                                                                <span className="text-sm text-gray-300">{structuredData.duration_mentioned}</span>
+                                                            </div>
+                                                        )}
                                                         {structuredData.all_symptoms && structuredData.all_symptoms.length > 0 && (
-                                                            <div>
-                                                                <span className="text-xs text-gray-400 uppercase block mb-1">Symptoms</span>
+                                                            <div className="col-span-1 md:col-span-2 bg-gray-900/40 p-3 rounded-lg border border-gray-700/50">
+                                                                <span className="text-[10px] uppercase tracking-wider text-gray-400 block mb-2">Symptoms</span>
                                                                 <div className="flex flex-wrap gap-2">
                                                                     {structuredData.all_symptoms.map((sym, idx) => (
-                                                                        <span key={idx} className="px-2 py-1 bg-blue-900/40 border border-blue-700/50 rounded-md text-xs text-blue-200">
-                                                                            {sym.symptom} {sym.severity && <span className="opacity-60">({sym.severity})</span>}
+                                                                        <span key={idx} className="inline-flex items-center gap-1 px-2 py-1 bg-blue-500/10 border border-blue-500/30 rounded text-xs text-blue-200">
+                                                                            {sym.symptom}
+                                                                            {sym.severity && <span className="text-blue-400/70 text-[10px]">({sym.severity})</span>}
                                                                         </span>
                                                                     ))}
                                                                 </div>
                                                             </div>
                                                         )}
-
-                                                        <div className="grid grid-cols-2 gap-2">
-                                                            {structuredData.duration_mentioned && (
-                                                                <div className="bg-gray-900/50 p-2 rounded-lg">
-                                                                    <span className="text-xs text-gray-400 uppercase block mb-1">Duration</span>
-                                                                    <span className="text-sm text-gray-300">{structuredData.duration_mentioned}</span>
-                                                                </div>
-                                                            )}
-                                                            {structuredData.medications_mentioned && structuredData.medications_mentioned.length > 0 && (
-                                                                <div className="bg-gray-900/50 p-2 rounded-lg">
-                                                                    <span className="text-xs text-gray-400 uppercase block mb-1">Meds</span>
-                                                                    <span className="text-sm text-gray-300">{structuredData.medications_mentioned.join(', ')}</span>
-                                                                </div>
-                                                            )}
-                                                        </div>
+                                                        {structuredData.medications_mentioned && structuredData.medications_mentioned.length > 0 && (
+                                                            <div className="col-span-1 md:col-span-2 bg-gray-900/40 p-3 rounded-lg border border-gray-700/50">
+                                                                <span className="text-[10px] uppercase tracking-wider text-gray-400 block mb-1">Medications</span>
+                                                                <span className="text-sm text-gray-300">{structuredData.medications_mentioned.join(', ')}</span>
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 )}
 
-                                                <div className="text-sm text-gray-200 prose prose-invert prose-sm max-w-none">
+                                                {/* Markdown Analysis */}
+                                                <div className="bg-gray-800/50 p-4 rounded-lg border border-gray-700/50 text-sm text-gray-200 prose prose-invert prose-sm max-w-none shadow-inner">
                                                     <ReactMarkdown>{m.content}</ReactMarkdown>
                                                 </div>
                                             </div>
