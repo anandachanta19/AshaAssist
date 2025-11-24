@@ -4,7 +4,8 @@
  * Features:
  * 1. Role-Based Access: Admin (Read-Only) vs Asha Karmi (Full Access).
  * 2. Continue Chat Flow: existing chats require a "Continue" action to resume context.
- * 3. Text-to-Speech & Translation: Integrated directly into the chat stream.
+ * 3. RESTORED: Text-to-Speech logic reverted to the simple version that works best.
+ * 4. Voice Input: Uses 'textBeforeListening' to append text instead of overwriting.
  */
 
 import axios from 'axios';
@@ -152,23 +153,84 @@ const VisitPage = () => {
 
     const { messages, setMessages, input, setInput, handleInputChange, handleSubmit, isLoading } = useChat(visitId, initialMessages, speechLang);
 
+    // --- Voice Input Refs ---
     const [isListening, setIsListening] = useState(false);
     const recognitionRef = useRef(null);
+    const textBeforeListening = useRef(""); // Keep this fix for Voice Input
     const scrollRef = useRef(null);
 
-    // --- Text-to-Speech ---
+    // --- Text-to-Speech (Fixed for all languages with debugging) ---
     const handleSpeak = (textToSpeak, lang) => {
         window.speechSynthesis.cancel();
-        // Improved Regex from V2 for better pacing
-        const cleanText = textToSpeak.replace(/[*#]/g, '').replace(/\n/g, ' . ');
-        const utterance = new SpeechSynthesisUtterance(cleanText);
-        utterance.lang = lang;
+
+        // Wait for voices to load if they haven't already
+        const speakWithVoice = () => {
+            const cleanText = textToSpeak.replace(/[*#]/g, '').replace(/\n/g, ' . ');
+            const utterance = new SpeechSynthesisUtterance(cleanText);
+            utterance.lang = lang;
+
+            const voices = window.speechSynthesis.getVoices();
+
+            // Debug: Log available voices for the language
+            console.log(`Requested language: ${lang}`);
+            console.log('Available voices:', voices.map(v => `${v.name} (${v.lang})`));
+
+            // Try to find exact match first, then language prefix match
+            let voice = voices.find(v => v.lang === lang) ||
+                voices.find(v => v.lang.startsWith(lang.split('-')[0])) ||
+                voices.find(v => v.lang.toLowerCase().includes(lang.split('-')[0].toLowerCase()));
+
+            // If no voice found, try without region code (e.g., 'te' instead of 'te-IN')
+            if (!voice) {
+                const langCode = lang.split('-')[0];
+                voice = voices.find(v => v.lang.startsWith(langCode));
+            }
+
+            // Last resort: use default voice but keep the language setting
+            if (!voice) {
+                console.warn(`No voice found for ${lang}, using default voice`);
+                voice = voices[0]; // Use first available voice
+            }
+
+            if (voice) {
+                utterance.voice = voice;
+                console.log(`Using voice: ${voice.name} (${voice.lang})`);
+            }
+
+            // Set rate and pitch for better clarity
+            utterance.rate = 0.9;
+            utterance.pitch = 1.0;
+            utterance.volume = 1.0;
+
+            // Error handling
+            utterance.onerror = (event) => {
+                console.error('Speech synthesis error:', event);
+                setError(`Speech error: ${event.error}`);
+            };
+
+            utterance.onend = () => {
+                console.log('Speech finished');
+            };
+
+            window.speechSynthesis.speak(utterance);
+        };
+
+        // Check if voices are loaded
         const voices = window.speechSynthesis.getVoices();
-        const voice = voices.find(v => v.lang === lang) || voices.find(v => v.lang.startsWith(lang.split('-')[0]));
-        if (voice) {
-            utterance.voice = voice;
+        if (voices.length > 0) {
+            speakWithVoice();
+        } else {
+            // Wait for voices to load
+            window.speechSynthesis.onvoiceschanged = () => {
+                speakWithVoice();
+            };
+            // Fallback timeout in case onvoiceschanged doesn't fire
+            setTimeout(() => {
+                if (window.speechSynthesis.getVoices().length > 0) {
+                    speakWithVoice();
+                }
+            }, 100);
         }
-        window.speechSynthesis.speak(utterance);
     };
 
     // --- Fetch Data ---
@@ -186,11 +248,10 @@ const VisitPage = () => {
                     setLastAnalysis(loadedAnalysis);
 
                     // --- Logic: Lock Input if history exists AND not Admin ---
-                    // Admins see read-only view anyway, so this mainly affects Asha Karmi
                     if ((loadedMessages.length > 0 || loadedAnalysis) && !isAdmin) {
-                        setIsChatInputActive(false); // Show "Continue Chat" button
+                        setIsChatInputActive(false);
                     } else {
-                        setIsChatInputActive(true); // Show Input immediately
+                        setIsChatInputActive(true);
                     }
 
                     if (loadedAnalysis) {
@@ -214,7 +275,7 @@ const VisitPage = () => {
         fetchVisitData();
         fetchChatHistory();
         return () => { isMounted = false; };
-    }, [visitId, isAdmin]); // Added isAdmin to dep array
+    }, [visitId, isAdmin]);
 
     // --- Save Chat ---
     const saveChatSession = async (analysisToSave, structuredDataToSave) => {
@@ -278,12 +339,10 @@ const VisitPage = () => {
 
     // --- Continue Chat (User Only) ---
     const handleContinueChat = async () => {
-        if (isAdmin) return; // Guard clause
+        if (isAdmin) return;
         setIsContinuing(true);
         try {
-            // Hit specific endpoint to resume context
             const response = await axios.post(`${NODE_BACKEND_URL}/follow-up/${visitId}`);
-
             if (response.data && response.data.success && response.data.followUpQuestion) {
                 const followUpMessage = {
                     id: Date.now(),
@@ -292,18 +351,17 @@ const VisitPage = () => {
                 };
                 setMessages(prev => [...prev, followUpMessage]);
             }
-
-            setIsChatInputActive(true); // Unlock UI
+            setIsChatInputActive(true);
         } catch (err) {
             console.error("Error resuming chat:", err);
-            setIsChatInputActive(true); // Unlock UI anyway
+            setIsChatInputActive(true);
             setError("Failed to load follow-up question, but you can continue chatting.");
         } finally {
             setIsContinuing(false);
         }
     };
 
-    // --- Speech Recognition ---
+    // --- Speech Recognition (Keep overwrite fix) ---
     const handleListenToggle = () => {
         if (isListening) {
             if (recognitionRef.current) { recognitionRef.current.stop(); }
@@ -311,23 +369,47 @@ const VisitPage = () => {
         } else {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             if (!SpeechRecognition) { setError("Speech recognition not supported."); return; }
+
+            // Store whatever text is currently in the input before we start listening
+            textBeforeListening.current = input;
+
             const recognition = new SpeechRecognition();
             recognition.continuous = true;
             recognition.interimResults = true;
             recognition.lang = speechLang;
             recognitionRef.current = recognition;
+
             recognition.onresult = (event) => {
                 let fullInterimTranscript = '';
                 let fullFinalTranscript = '';
+
                 for (let i = 0; i < event.results.length; ++i) {
                     const transcriptPart = event.results[i][0].transcript;
-                    if (event.results[i].isFinal) { fullFinalTranscript += transcriptPart + ' '; }
-                    else { fullInterimTranscript = transcriptPart; }
+                    if (event.results[i].isFinal) {
+                        fullFinalTranscript += transcriptPart + ' ';
+                    } else {
+                        fullInterimTranscript += transcriptPart;
+                    }
                 }
-                setInput(fullFinalTranscript.trim() + (fullInterimTranscript ? ' ' + fullInterimTranscript : ''));
+
+                const newTranscript = fullFinalTranscript + fullInterimTranscript;
+
+                // Combine old text + new text
+                const spacer = (textBeforeListening.current && newTranscript) ? ' ' : '';
+                setInput(textBeforeListening.current + spacer + newTranscript);
             };
-            recognition.onerror = (event) => { setError(`Speech error: ${event.error}`); setIsListening(false); };
-            recognition.onend = () => { setIsListening(false); };
+
+            recognition.onerror = (event) => {
+                if (event.error !== 'no-speech') {
+                    setError(`Speech error: ${event.error}`);
+                    setIsListening(false);
+                }
+            };
+
+            recognition.onend = () => {
+                setIsListening(false);
+            };
+
             recognition.start();
             setIsListening(true);
         }
@@ -354,9 +436,7 @@ const VisitPage = () => {
             {/* Header */}
             <header className="px-6 py-4 border-b border-gray-700 flex-shrink-0">
                 <div className="flex justify-between items-center mb-2">
-                    <button onClick={() => navigate('/home')} className="text-blue-400 hover:underline">← Back</button>
-
-                    {/* Only show "End & Analyze" for Non-Admins */}
+                    <button onClick={() => navigate(-1)} className="text-blue-400 hover:underline">← Back</button>
                     {!isAdmin && (
                         <button onClick={handleEndSession} disabled={isLoading || isAnalyzing || messages.length < 2} className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg disabled:bg-gray-500 disabled:cursor-not-allowed">
                             {isAnalyzing ? (
@@ -444,11 +524,9 @@ const VisitPage = () => {
 
                 {error && <p className="px-6 text-red-400 text-sm">{error}</p>}
 
-                {/* Footer: Admin sees NOTHING. User sees Continue OR Input. */}
                 {!isAdmin && (
                     <footer className="px-6 py-4 border-t border-gray-700 flex-shrink-0">
                         {!isChatInputActive ? (
-                            // --- Continue Chat Button (History exists, User Mode) ---
                             <div className="flex items-center justify-center w-full">
                                 <button
                                     onClick={handleContinueChat}
@@ -469,7 +547,6 @@ const VisitPage = () => {
                                 </button>
                             </div>
                         ) : (
-                            // --- Standard Input Form (New Chat or Continued) ---
                             <form onSubmit={handleSubmit} className="flex items-center gap-3">
                                 <select
                                     value={speechLang}

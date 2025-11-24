@@ -9,20 +9,10 @@ import { useEffect, useState } from "react";
 import PhoneInput, { isValidPhoneNumber } from 'react-phone-number-input';
 import 'react-phone-number-input/style.css';
 import { Link, useNavigate } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
 import apiClient from "../api";
+import AlertBell from '../components/AlertBell';
 import Loading from '../components/Loading';
-
-// --- Components ---
-
-// Alert / Warning Icon (Triangle with Exclamation)
-const AlertIcon = ({ className }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-    <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path>
-    <line x1="12" y1="9" x2="12" y2="13"></line>
-    <line x1="12" y1="17" x2="12.01" y2="17"></line>
-  </svg>
-);
+import { useAuth } from "../context/AuthContext";
 
 /**
  * @component HomePage
@@ -48,7 +38,6 @@ const HomePage = () => {
   const [recentVisits, setRecentVisits] = useState([]);
   const [loadingVisits, setLoadingVisits] = useState(true);
   const [errorVisits, setErrorVisits] = useState("");
-  const [alertCount, setAlertCount] = useState(0);
 
   // --- API Fetchers ---
 
@@ -66,21 +55,8 @@ const HomePage = () => {
     }
   };
 
-  const fetchAlertStats = async () => {
-    try {
-      const response = await apiClient.get("/alerts/dashboard");
-      // Calculate total alerts across all visits
-      const dashboardData = response.data.dashboardData || [];
-      const total = dashboardData.reduce((acc, curr) => acc + curr.totalAlerts, 0);
-      setAlertCount(total);
-    } catch (err) {
-      console.error("Error fetching alert stats:", err);
-    }
-  };
-
   useEffect(() => {
     fetchRecentVisits();
-    fetchAlertStats();
   }, []);
 
   // --- Handlers: Form Inputs ---
@@ -179,7 +155,6 @@ const HomePage = () => {
       setTimeout(() => {
         resetOtpFlow();
         fetchRecentVisits();
-        fetchAlertStats(); // Refresh alerts too just in case
       }, 2500);
 
     } catch (err) {
@@ -217,31 +192,12 @@ const HomePage = () => {
         <div className="flex items-center gap-2">
           <div className="relative">
             <h1 className="text-xl font-bold text-white">Asha Assist Dashboard</h1>
-            {/* Pulsing Red Dot if alerts exist */}
-            {alertCount > 0 && (
-              <span className="absolute -top-1 -right-2 h-3 w-3 bg-red-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.8)]"></span>
-            )}
           </div>
         </div>
 
         <div className="flex items-center gap-4 md:gap-6">
           {/* Alerts Bell Icon */}
-          <Link
-            to="/alerts"
-            className={`relative group p-2 transition ${alertCount > 0 ? 'text-red-400 hover:text-red-300' : 'text-gray-300 hover:text-white'}`}
-          >
-            <AlertIcon className="w-6 h-6" />
-
-            {alertCount > 0 && (
-              <span className="absolute -top-1 -right-1 h-5 w-5 bg-red-600 text-white text-xs font-bold flex items-center justify-center rounded-full border-2 border-gray-800 animate-bounce">
-                {alertCount}
-              </span>
-            )}
-
-            <span className="absolute top-full mt-1 left-1/2 transform -translate-x-1/2 bg-black text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition pointer-events-none whitespace-nowrap">
-              Critical Alerts
-            </span>
-          </Link>
+          <AlertBell />
 
           <div className="hidden md:block h-6 w-px bg-gray-600"></div>
 
@@ -290,8 +246,10 @@ const HomePage = () => {
                       value={patientData.patientPhoneNumber}
                       onChange={handlePhoneChange}
                       className="phone-input-container"
-                      inputClassName="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-blue-500 focus:border-blue-500"
-                      required
+                      numberInputProps={{
+                        className: "w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-blue-500 focus:border-blue-500",
+                        required: true
+                      }}
                     />
                   </div>
                   <button type="submit" disabled={isLoadingOtp} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-lg font-semibold disabled:opacity-50 disabled:cursor-not-allowed">

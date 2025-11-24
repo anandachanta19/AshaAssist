@@ -4,9 +4,9 @@
  * Fetches data directly from the Node.js backend (Port 8001).
  */
 
-import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import axios from "axios"; // Import axios directly to bypass the global apiClient
+import { useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import Loading from "../components/Loading";
 
 // Define the specific URL for the Node.js Microservice
@@ -26,6 +26,7 @@ const AlertsPage = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const [expandedAlertId, setExpandedAlertId] = useState(null); // To toggle chat context view
+    const navigate = useNavigate();
 
     useEffect(() => {
         fetchAlerts();
@@ -60,7 +61,12 @@ const AlertsPage = () => {
             <div className="max-w-5xl mx-auto">
                 <div className="flex justify-between items-center mb-8">
                     <h1 className="text-3xl font-bold text-white">Patient Health Alerts</h1>
-                    <Link to="/home" className="text-blue-400 hover:text-blue-300">← Back to Dashboard</Link>
+                    <button
+                        onClick={() => navigate(-1)}
+                        className="text-blue-400 hover:text-blue-300 font-semibold flex items-center gap-2"
+                    >
+                        ← Go Back
+                    </button>
                 </div>
 
                 {error && <div className="bg-red-900/50 border border-red-500 text-red-200 p-4 rounded-lg mb-6">{error}</div>}

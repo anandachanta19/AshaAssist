@@ -7,6 +7,7 @@ import { AlertTriangle, ChevronRight, MessageSquare, Shield, Stethoscope, Users 
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import apiClient from '../api';
+import AlertBell from '../components/AlertBell';
 import Loading from '../components/Loading';
 import { useAuth } from '../context/AuthContext';
 
@@ -59,6 +60,7 @@ const AdminDashboard = () => {
           <Shield size={20} className="text-blue-400" /> Asha Assist - Admin Panel
         </h1>
         <div className="flex items-center gap-4">
+          <AlertBell />
           <span className="hidden md:inline">Welcome, {user?.username || 'Admin'}</span>
 
           <Link
