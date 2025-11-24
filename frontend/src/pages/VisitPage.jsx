@@ -260,6 +260,13 @@ const VisitPage = () => {
 
                     if (loadedAnalysis) {
                         setInitialMessages([...loadedMessages, { id: 'analysis-loaded-' + Date.now(), role: 'assistant', content: loadedAnalysis, isAnalysis: true, isLastAnalysis: true }]);
+                    } else if (loadedMessages.length === 0) {
+                        // Inject initial greeting if no history exists
+                        setInitialMessages([{
+                            id: 'greeting-' + Date.now(),
+                            role: 'assistant',
+                            content: "Hello! How is your health condition today?"
+                        }]);
                     } else { setInitialMessages(loadedMessages); }
                 }
             } catch (err) { console.error("Error fetching chat history:", err); setError("Could not load previous chat history."); }
@@ -461,25 +468,7 @@ const VisitPage = () => {
             {/* Main Chat Area */}
             <div className="flex-1 flex flex-col overflow-y-hidden">
                 <section ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-6">
-                    {/* Welcome Message */}
-                    <div className="flex items-start gap-3">
-                        <div className="flex items-start gap-2 group">
-                            <div className="p-3 rounded-2xl max-w-lg bg-gray-700 text-gray-200">
-                                <p className="text-sm leading-relaxed pr-8">
-                                    {isAdmin ? "Viewing chat history (Read-Only)." : "AI assistant. Use mic for selected language."}
-                                </p>
-                            </div>
-                            <button
-                                onClick={() => handleSpeak(isAdmin ? "Viewing chat history." : "AI assistant. Use mic for selected language.", speechLang)}
-                                className="p-1 text-gray-500 hover:text-gray-300 transition-opacity opacity-0 group-hover:opacity-100 flex-shrink-0"
-                                title="Read aloud"
-                            >
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                                    <path fillRule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217zM14.657 2.929a1 1 0 011.414 0A9.972 9.972 0 0119 10a9.972 9.972 0 01-2.929 7.071 1 1 0 01-1.414-1.414A7.971 7.971 0 0017 10c0-2.21-.894-4.208-2.343-5.657a1 1 0 010-1.414zm-2.829 2.828a1 1 0 011.415 0A5.983 5.983 0 0115 10a5.984 5.984 0 01-1.757 4.243 1 1 0 01-1.415-1.415A3.984 3.984 0 0013 10a3.983 3.983 0 00-1.172-2.828 1 1 0 010-1.415z" clipRule="evenodd" />
-                                </svg>
-                            </button>
-                        </div>
-                    </div>
+                    {/* Welcome Message Removed */}
 
                     {/* Messages */}
                     {messages.map((m) => (
