@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
@@ -24,6 +25,7 @@ import lombok.Data;
 @Data
 @Entity
 @Table(name = "patients")
+@JsonIgnoreProperties({ "hibernateLazyInitializer", "handler" })
 public class Patient {
 
     @Id
@@ -47,11 +49,7 @@ public class Patient {
 
     private LocalDateTime updatedAt;
 
-    @OneToMany(
-        mappedBy = "patient",
-        cascade = CascadeType.ALL,
-        orphanRemoval = true
-    )
+    @OneToMany(mappedBy = "patient", cascade = CascadeType.ALL, orphanRemoval = true)
     @JsonIgnore
     private List<Visit> visits;
 

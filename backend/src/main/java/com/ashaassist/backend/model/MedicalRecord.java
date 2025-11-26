@@ -21,7 +21,8 @@ import lombok.Data;
 
 /**
  * Represents a medical record in the system.
- * This entity stores information related to a patient's visit, including the raw transcript of the consultation
+ * This entity stores information related to a patient's visit, including the
+ * raw transcript of the consultation
  * and structured medical data extracted from it.
  */
 @Data

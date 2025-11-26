@@ -1,4 +1,3 @@
-import React from 'react';
 
 /**
  * Reusable Loading component using Tailwind classes so it matches the app UI.

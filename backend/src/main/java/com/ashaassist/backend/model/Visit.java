@@ -17,7 +17,8 @@ import lombok.Data;
 
 /**
  * Represents a visit in the system.
- * This entity links an Asha Karmi, a patient, and a medical record, and stores details about the visit itself,
+ * This entity links an Asha Karmi, a patient, and a medical record, and stores
+ * details about the visit itself,
  * such as OTP verification status and timestamps.
  */
 @Data
@@ -41,6 +42,7 @@ public class Visit {
     private LocalDateTime otpExpiresAt;
 
     @Column(columnDefinition = "boolean default false")
+    @com.fasterxml.jackson.annotation.JsonProperty("isVerified")
     private boolean isVerified = false;
 
     private LocalDateTime verifiedAt;
@@ -48,10 +50,6 @@ public class Visit {
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
 
-    @OneToOne(
-        mappedBy = "visit",
-        cascade = CascadeType.ALL,
-        fetch = FetchType.LAZY
-    )
+    @OneToOne(mappedBy = "visit", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private MedicalRecord medicalRecord;
 }

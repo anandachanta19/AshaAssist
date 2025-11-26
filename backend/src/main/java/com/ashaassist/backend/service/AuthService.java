@@ -15,7 +15,8 @@ import com.ashaassist.backend.repository.UserRepository;
 import com.ashaassist.backend.security.JwtTokenProvider;
 
 /**
- * Service class for handling authentication-related operations such as user registration and login.
+ * Service class for handling authentication-related operations such as user
+ * registration and login.
  */
 @Service
 public class AuthService {
@@ -28,15 +29,16 @@ public class AuthService {
     /**
      * Constructs a new {@code AuthService} with the specified dependencies.
      *
-     * @param userRepository      the repository for user data access.
-     * @param passwordEncoder     the encoder for hashing passwords.
-     * @param authenticationManager the manager for handling authentication requests.
-     * @param jwtTokenProvider    the provider for generating JWTs.
+     * @param userRepository        the repository for user data access.
+     * @param passwordEncoder       the encoder for hashing passwords.
+     * @param authenticationManager the manager for handling authentication
+     *                              requests.
+     * @param jwtTokenProvider      the provider for generating JWTs.
      */
     public AuthService(UserRepository userRepository,
-                       PasswordEncoder passwordEncoder,
-                       AuthenticationManager authenticationManager,
-                       JwtTokenProvider jwtTokenProvider) {
+            PasswordEncoder passwordEncoder,
+            AuthenticationManager authenticationManager,
+            JwtTokenProvider jwtTokenProvider) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.authenticationManager = authenticationManager;
@@ -46,7 +48,8 @@ public class AuthService {
     /**
      * Registers a new user in the system.
      *
-     * @param registerDto the data transfer object containing registration information.
+     * @param registerDto the data transfer object containing registration
+     *                    information.
      * @return a success message upon successful registration.
      * @throws RuntimeException if the username is already taken.
      */
@@ -75,8 +78,7 @@ public class AuthService {
     public JwtAuthResponse login(LoginDto loginDto) {
         Authentication authentication = authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(
                 loginDto.getUsername(),
-                loginDto.getPassword()
-        ));
+                loginDto.getPassword()));
 
         SecurityContextHolder.getContext().setAuthentication(authentication);
 
