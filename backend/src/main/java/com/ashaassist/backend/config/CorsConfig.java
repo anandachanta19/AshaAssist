@@ -23,12 +23,12 @@ public class CorsConfig {
             @Override
             public void addCorsMappings(CorsRegistry registry) {
                 registry
-                    .addMapping("/api/**") // Apply to all API endpoints
-                    .allowedOrigins("http://localhost:5173") // Allow the React dev server
-                    .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS") // Allowed HTTP methods
-                    .allowedHeaders("*") // Allow all headers
-                    .allowCredentials(true);
-                //mg
+                        .addMapping("/api/**") // Apply to all API endpoints
+                        .allowedOrigins("http://localhost:5173") // Allow the React dev server
+                        .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS") // Allowed HTTP methods
+                        .allowedHeaders("*") // Allow all headers
+                        .allowCredentials(true);
+                // mg
             }
         };
     }

@@ -49,11 +49,7 @@ public class Patient {
 
     private LocalDateTime updatedAt;
 
-    @OneToMany(
-        mappedBy = "patient",
-        cascade = CascadeType.ALL,
-        orphanRemoval = true
-    )
+    @OneToMany(mappedBy = "patient", cascade = CascadeType.ALL, orphanRemoval = true)
     @JsonIgnore
     private List<Visit> visits;
 

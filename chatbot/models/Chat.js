@@ -44,16 +44,16 @@ const chatSchema = new mongoose.Schema({
   messages: [messageSchema],
   analysis: { type: String, default: null },
   structuredData: { type: mongoose.Schema.Types.Mixed, default: null },
-  
+
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
 });
 
-chatSchema.pre('save', function(next) {
+chatSchema.pre('save', function (next) {
   this.updatedAt = Date.now();
   next();
 });
-chatSchema.pre('findOneAndUpdate', function(next) {
+chatSchema.pre('findOneAndUpdate', function (next) {
   this.set({ updatedAt: Date.now() });
   next();
 });

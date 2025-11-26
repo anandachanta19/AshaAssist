@@ -15,6 +15,10 @@ import com.ashaassist.backend.repository.PatientRepository;
 import com.ashaassist.backend.repository.UserRepository;
 import com.ashaassist.backend.repository.VisitRepository;
 
+/**
+ * Controller for handling administrative tasks and dashboard statistics.
+ * Accessible only to users with the 'ADMIN' role.
+ */
 @RestController
 @RequestMapping("/api/admin") // Base path protected by SecurityConfig
 public class AdminController {
@@ -32,7 +36,9 @@ public class AdminController {
     }
 
     /**
-     * Endpoint to get high-level dashboard statistics.
+     * Retrieves high-level dashboard statistics.
+     * 
+     * @return A map containing counts of total visits, patients, and workers.
      */
     @GetMapping("/stats")
     public Map<String, Long> getStats() {
@@ -45,7 +51,10 @@ public class AdminController {
     }
 
     /**
-     * Endpoint to get the 10 most recent visits from *all* users.
+     * Retrieves the 10 most recent visits from all users.
+     * 
+     * @return A list of the 10 most recent visits, ordered by verification date
+     *         descending.
      */
     @GetMapping("/recent-visits")
     @Transactional(readOnly = true)
@@ -55,7 +64,9 @@ public class AdminController {
     }
 
     /**
-     * Endpoint to get a list of all users (Asha Karmis).
+     * Retrieves a list of all registered users (Asha Karmis).
+     * 
+     * @return A list of all User entities.
      */
     @GetMapping("/users")
     public List<User> getAllUsers() {
@@ -65,7 +76,9 @@ public class AdminController {
     }
 
     /**
-     * Endpoint to get a list of all patients.
+     * Retrieves a list of all registered patients.
+     * 
+     * @return A list of all Patient entities.
      */
     @GetMapping("/patients")
     public List<com.ashaassist.backend.model.Patient> getAllPatients() {
@@ -74,12 +87,25 @@ public class AdminController {
 
     // --- User Profile Endpoints ---
 
+    /**
+     * Retrieves a specific user by their ID.
+     * 
+     * @param id The ID of the user to retrieve.
+     * @return The User entity.
+     * @throws RuntimeException if the user is not found.
+     */
     @GetMapping("/users/{id}")
     public User getUser(@org.springframework.web.bind.annotation.PathVariable Long id) {
         return userRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("User not found"));
     }
 
+    /**
+     * Retrieves all visits conducted by a specific Asha Karmi (user).
+     * 
+     * @param id The ID of the Asha Karmi.
+     * @return A list of visits associated with the user.
+     */
     @GetMapping("/users/{id}/visits")
     @Transactional(readOnly = true)
     public List<Visit> getUserVisits(@org.springframework.web.bind.annotation.PathVariable Long id) {
@@ -88,6 +114,13 @@ public class AdminController {
 
     // --- Patient Profile Endpoints ---
 
+    /**
+     * Retrieves a specific patient by their ID.
+     * 
+     * @param id The ID of the patient to retrieve.
+     * @return The Patient entity.
+     * @throws RuntimeException if the patient is not found.
+     */
     @GetMapping("/patients/{id}")
     public com.ashaassist.backend.model.Patient getPatient(
             @org.springframework.web.bind.annotation.PathVariable Long id) {
@@ -95,6 +128,12 @@ public class AdminController {
                 .orElseThrow(() -> new RuntimeException("Patient not found"));
     }
 
+    /**
+     * Retrieves all visits associated with a specific patient.
+     * 
+     * @param id The ID of the patient.
+     * @return A list of visits associated with the patient.
+     */
     @GetMapping("/patients/{id}/visits")
     @Transactional(readOnly = true)
     public List<Visit> getPatientVisits(@org.springframework.web.bind.annotation.PathVariable Long id) {

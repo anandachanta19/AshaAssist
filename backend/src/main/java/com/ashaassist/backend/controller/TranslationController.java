@@ -17,8 +17,9 @@ import com.google.cloud.translate.v3.TranslateTextRequest;
 import com.google.cloud.translate.v3.TranslateTextResponse;
 import com.google.cloud.translate.v3.TranslationServiceClient;
 
-// DTO to receive the text from the frontend
-// --- MODIFIED: We no longer need source/target language from the client ---
+/**
+ * DTO to receive the text payload for translation.
+ */
 class TranslatePayload {
     private String text;
 
@@ -31,10 +32,22 @@ class TranslatePayload {
     }
 }
 
+/**
+ * Controller for handling text translation requests using Google Cloud
+ * Translation API.
+ */
 @RestController
 @RequestMapping("/api")
 public class TranslationController {
 
+    /**
+     * Translates the provided text to English.
+     * Automatically detects the source language.
+     * 
+     * @param payload The payload containing the text to translate.
+     * @return The translated text in English, or the original text if it's already
+     *         in English.
+     */
     @PostMapping("/translate")
     public ResponseEntity<String> translateText(@RequestBody TranslatePayload payload) {
 

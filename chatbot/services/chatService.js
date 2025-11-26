@@ -62,7 +62,7 @@ class ChatService {
             const translation = response.translations[0].translatedText;
             return translation;
         } catch (error) {
-            console.error("   ❌ Translation error:", error);
+            console.error("Translation error:", error);
             return text;
         }
     }
@@ -84,7 +84,7 @@ class ChatService {
                 await collection.insertOne({ visitId: visitId, text: cleanedChunk, $vector: embedResp.embedding });
                 count++;
             } catch (ollamaError) {
-                console.error(`❌ Ollama embedding error for chunk: "${cleanedChunk.slice(0, 50)}..."`, ollamaError.message);
+                console.error(`Ollama embedding error for chunk: "${cleanedChunk.slice(0, 50)}..."`, ollamaError.message);
             }
         }
         console.log(`✅ INDEXING COMPLETE: Stored ${count} chunks for Visit ID: ${visitId}`);
@@ -105,7 +105,7 @@ class ChatService {
             const embedResp = await ollama.embeddings({ model: "nomic-embed-text", prompt: latestMessage });
             embedding = embedResp.embedding;
         } catch (err) {
-            console.error("   ❌ Ollama embedding error:", err.message);
+            console.error("Ollama embedding error:", err.message);
         }
 
         if (embedding.length > 0) {
@@ -117,7 +117,7 @@ class ChatService {
                     docContext = documents.map((doc, i) => `Context Document ${i + 1}:\n${doc.text} (Similarity: ${doc.$similarity?.toFixed(4) || 'N/A'})`).join("\n\n");
                 }
             } catch (err) {
-                console.error("   ❌ DB query error:", err);
+                console.error("DB query error:", err);
             }
         }
 
@@ -164,7 +164,7 @@ class ChatService {
      * Run an LLM-based classifier to decide if the VISIT ANALYSIS indicates a serious condition.
      */
     async detectSeriousIssue(analysisText, structuredData, visitId) {
-        console.log(`   ⚠️ Running seriousness classifier on Analysis for Visit ID: ${visitId}`);
+        console.log(`Running seriousness classifier on Analysis for Visit ID: ${visitId}`);
         const prompt = SERIOUSNESS_PROMPT(analysisText, structuredData);
 
         try {
@@ -179,7 +179,7 @@ class ChatService {
             }
             return parsed;
         } catch (err) {
-            console.error("   ❌ Seriousness classifier error:", err.message);
+            console.error("Seriousness classifier error:", err.message);
             return {
                 alert: false,
                 severity: "low",
@@ -194,14 +194,14 @@ class ChatService {
      * Generate a concise analysis for a visit.
      */
     async analyzeVisit(visitId, messages, targetLanguage) {
-        console.log(`\n🔬 ANALYZING chat for Visit ID: ${visitId}...`);
+        console.log(`\nANALYZING chat for Visit ID: ${visitId}...`);
 
         // 1. Extract Structured Data
         let structuredData;
         try {
             structuredData = await this.extractStructuredData(messages, visitId);
         } catch (extractionError) {
-            console.warn(`   ⚠️ Could not extract structured data. Falling back to raw text analysis.`);
+            console.warn(`Could not extract structured data. Falling back to raw text analysis.`);
             structuredData = { error: "Extraction failed" };
         }
 
@@ -220,7 +220,7 @@ class ChatService {
         try {
             const detectionResult = await this.detectSeriousIssue(analysisText, structuredData, visitId);
             if (detectionResult && detectionResult.alert) {
-                console.log(`   🚨 ALERT TRIGGERED: ${detectionResult.label} (${detectionResult.severity})`);
+                console.log(`ALERT TRIGGERED: ${detectionResult.label} (${detectionResult.severity})`);
                 const newAlert = new Alert({
                     visitId: visitId,
                     label: detectionResult.label,
@@ -233,10 +233,10 @@ class ChatService {
                 await newAlert.save();
                 generatedAlert = detectionResult;
             } else {
-                console.log(`   ✅ Condition assessed as LOW severity/Routine. No alert saved.`);
+                console.log(`Condition assessed as LOW severity/Routine. No alert saved.`);
             }
         } catch (alertError) {
-            console.error("   ⚠️ Error processing seriousness alert:", alertError);
+            console.error("Error processing seriousness alert:", alertError);
         }
 
         const translatedAnalysis = await this.translateText(analysisText, targetLanguage);

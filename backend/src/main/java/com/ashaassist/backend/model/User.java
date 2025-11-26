@@ -41,11 +41,7 @@ public class User {
 
     private String role = "ASHA_KARMI";
 
-    @OneToMany(
-        mappedBy = "ashaKarmi",
-        cascade = CascadeType.ALL,
-        orphanRemoval = true
-    )
+    @OneToMany(mappedBy = "ashaKarmi", cascade = CascadeType.ALL, orphanRemoval = true)
     @JsonIgnore
     private List<Visit> visits;
 

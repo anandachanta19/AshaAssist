@@ -1,5 +1,5 @@
-import './App.css';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import './App.css';
 import { AuthProvider, useAuth } from './context/AuthContext';
 
 // Pages
@@ -8,12 +8,12 @@ import AdminPatientProfile from './pages/AdminPatientProfile';
 import AdminPatients from './pages/AdminPatients';
 import AdminUserProfile from './pages/AdminUserProfile';
 import AdminUsers from './pages/AdminUsers';
+import AlertsPage from './pages/Alerts'; // Added Alerts Page
 import Home from './pages/Home';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import VisitPage from './pages/VisitPage';
 import Welcome from './pages/Welcome';
-import AlertsPage from './pages/Alerts'; // Added Alerts Page
 
 // Components
 import AdminRoute from './components/AdminRoute';

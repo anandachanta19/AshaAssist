@@ -14,7 +14,8 @@ import org.springframework.stereotype.Service;
 import com.ashaassist.backend.repository.UserRepository;
 
 /**
- * A custom implementation of {@link UserDetailsService} that loads user-specific data from the database.
+ * A custom implementation of {@link UserDetailsService} that loads
+ * user-specific data from the database.
  */
 @Service
 public class CustomUserDetailsService implements UserDetailsService {
@@ -22,7 +23,8 @@ public class CustomUserDetailsService implements UserDetailsService {
     private final UserRepository userRepository;
 
     /**
-     * Constructs a new {@code CustomUserDetailsService} with the specified user repository.
+     * Constructs a new {@code CustomUserDetailsService} with the specified user
+     * repository.
      *
      * @param userRepository the repository for user data access.
      */
@@ -40,12 +42,10 @@ public class CustomUserDetailsService implements UserDetailsService {
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
         com.ashaassist.backend.model.User user = userRepository.findByUsername(username)
-                .orElseThrow(() ->
-                        new UsernameNotFoundException("User not found with username: " + username));
+                .orElseThrow(() -> new UsernameNotFoundException("User not found with username: " + username));
 
         List<GrantedAuthority> authorities = Collections.singletonList(
-                new SimpleGrantedAuthority(user.getRole())
-        );
+                new SimpleGrantedAuthority(user.getRole()));
 
         return new User(user.getUsername(), user.getPassword(), authorities);
     }
