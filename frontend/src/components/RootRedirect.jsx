@@ -4,7 +4,7 @@ import Loading from './Loading';
 
 /**
  * @component RootRedirect
- * @description Redirects users from '/' to their correct dashboard.
+ * @description Redirects users from '/' to their correct dashboard or welcome page.
  */
 const RootRedirect = () => {
     const { user, isLoading } = useAuth();
@@ -19,8 +19,8 @@ const RootRedirect = () => {
     }
 
     if (!user) {
-        // No user, send to login
-        return <Navigate to="/login" replace />;
+        // No user, show welcome page
+        return <Navigate to="/welcome" replace />;
     }
 
     // User exists, check role

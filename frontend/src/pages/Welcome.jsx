@@ -1,7 +1,7 @@
 /**
  * @file Welcome.jsx
  * @description Public landing page for unauthenticated users with app intro and navigation.
- * @route /
+ * @route / and /welcome
  * @dependencies react-router-dom(useNavigate)
  */
 
