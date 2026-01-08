@@ -33,7 +33,7 @@ if (!ASTRA_DB_API || !ASTRA_DB_APPLICATION_TOKEN || !GEMINI_API_KEY || !ASTRA_DB
 
 // Initialize Clients
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: "gemini-2.5-pro" });
+const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 const translationClient = new TranslationServiceClient();
 const client = new DataAPIClient(ASTRA_DB_APPLICATION_TOKEN);
 const db = client.db(ASTRA_DB_API, { keyspace: ASTRA_DB_NAMESPACE });

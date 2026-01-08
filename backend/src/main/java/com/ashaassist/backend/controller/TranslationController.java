@@ -4,6 +4,7 @@ package com.ashaassist.backend.controller;
 
 import java.io.IOException;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -40,6 +41,9 @@ class TranslatePayload {
 @RequestMapping("/api")
 public class TranslationController {
 
+    @Value("${google.project.id}")
+    private String projectId;
+
     /**
      * Translates the provided text to English.
      * Automatically detects the source language.
@@ -51,8 +55,6 @@ public class TranslationController {
     @PostMapping("/translate")
     public ResponseEntity<String> translateText(@RequestBody TranslatePayload payload) {
 
-        // --- FIX: Add your REAL Project ID ---
-        String projectId = "asha-assist-8c5be"; // <-- REPLACE THIS
         String textToTranslate = payload.getText();
 
         try (TranslationServiceClient client = TranslationServiceClient.create()) {

@@ -25,3 +25,5 @@ backend/src/main/resources/application-dev.properties
 backend/src/main/resources/google-credentials.json
 chatbot/.env
 chatbot/google-credentials.json
+WindowsSetup.txt
+2201009_endsem_report.pdf

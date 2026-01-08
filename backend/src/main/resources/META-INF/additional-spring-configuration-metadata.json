@@ -33,5 +33,10 @@
     "name": "twilio.phone-number",
     "type": "java.lang.String",
     "description": "A description for 'twilio.phone-number'"
+  },
+  {
+    "name": "google.project.id",
+    "type": "java.lang.String",
+    "description": "A description for 'google.project.id'"
   }
 ]}
